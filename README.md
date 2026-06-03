@@ -177,6 +177,7 @@ payroll.timesheets
 - `update-bank-transaction`: Update an existing bank transaction
 - `update-contact`: Update an existing contact (including its default currency)
 - `update-invoice`: Update an existing draft invoice
+- `void-invoice`: Void an approved invoice/bill (or delete a draft)
 - `update-item`: Update an existing item
 - `update-manual-journal`: Update an existing manual journal
 - `update-quote`: Update an existing draft quote

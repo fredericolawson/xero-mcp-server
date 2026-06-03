@@ -1,8 +1,9 @@
 import { xeroClient } from "../clients/xero-client.js";
 import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
-import { CurrencyCode, Invoice, LineItemTracking } from "xero-node";
+import { Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { resolveCurrencyCode } from "../helpers/resolve-currency-code.js";
 
 interface InvoiceLineItem {
   description: string;
@@ -26,24 +27,6 @@ export interface CreateInvoiceParams {
   dueDate?: string;
   currencyCode?: string;
   status?: CreatableInvoiceStatus;
-}
-
-/**
- * Validate and convert a 3-letter ISO currency string into the SDK enum.
- * Throws a user-meaningful error for unsupported codes.
- */
-function resolveCurrencyCode(currencyCode?: string): CurrencyCode | undefined {
-  if (!currencyCode) return undefined;
-  const code = currencyCode.toUpperCase();
-  if (!(code in CurrencyCode)) {
-    throw new Error(
-      `Unsupported currency code: "${currencyCode}". Use a 3-letter ISO code such as GBP, EUR or USD.`,
-    );
-  }
-  // xero-node's .d.ts declares CurrencyCode without its string values, so TS
-  // types it as numeric; at runtime the enum values ARE the 3-letter strings
-  // (e.g. CurrencyCode.GBP === "GBP"), which is exactly what the API expects.
-  return code as unknown as CurrencyCode;
 }
 
 async function createInvoice({

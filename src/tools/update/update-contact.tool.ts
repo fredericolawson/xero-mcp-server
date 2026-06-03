@@ -27,6 +27,10 @@ const UpdateContactTool = CreateXeroTool(
         country: z.string().optional(),
       })
       .optional(),
+    defaultCurrency: z
+      .string()
+      .describe("The contact's default currency as a 3-letter ISO code, e.g. GBP, EUR, USD. New bills and invoices for this contact inherit it when no currency is specified on the invoice. The currency must be enabled on the Xero organisation.")
+      .optional(),
   },
   async ({
     contactId,
@@ -36,6 +40,7 @@ const UpdateContactTool = CreateXeroTool(
     email,
     phone,
     address,
+    defaultCurrency,
   }: {
     contactId: string;
     name: string;
@@ -51,6 +56,7 @@ const UpdateContactTool = CreateXeroTool(
     };
     firstName?: string;
     lastName?: string;
+    defaultCurrency?: string;
   }) => {
     try {
       const response = await updateXeroContact(
@@ -61,6 +67,7 @@ const UpdateContactTool = CreateXeroTool(
         email,
         phone,
         address,
+        defaultCurrency,
       );
       if (response.isError) {
         return {
@@ -85,6 +92,9 @@ const UpdateContactTool = CreateXeroTool(
             type: "text" as const,
             text: [
               `Contact updated: ${contact.name} (ID: ${contact.contactID})`,
+              contact.defaultCurrency
+                ? `Default Currency: ${contact.defaultCurrency}`
+                : null,
               deepLink ? `Link to view: ${deepLink}` : null,
             ]
               .filter(Boolean)

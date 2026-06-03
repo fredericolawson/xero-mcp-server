@@ -167,7 +167,6 @@ payroll.timesheets
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
 - `create-invoice`: Create a new invoice (supports `currencyCode`, `dueDate`, and `status` — DRAFT/SUBMITTED/AUTHORISED)
-- `create-invoice-attachment`: Attach a local file (e.g. the source PDF) to an existing invoice or bill
 - `create-item`: Create a new item
 - `create-manual-journal`: Create a new manual journal
 - `create-payment`: Create a new payment
@@ -176,7 +175,7 @@ payroll.timesheets
 - `create-tracking-category`: Create a new tracking category
 - `create-tracking-option`: Create a new tracking option
 - `update-bank-transaction`: Update an existing bank transaction
-- `update-contact`: Update an existing contact
+- `update-contact`: Update an existing contact (including its default currency)
 - `update-invoice`: Update an existing draft invoice
 - `update-item`: Update an existing item
 - `update-manual-journal`: Update an existing manual journal

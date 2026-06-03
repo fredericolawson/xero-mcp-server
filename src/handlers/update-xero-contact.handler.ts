@@ -3,6 +3,7 @@ import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
 import { Contact, Phone, Address, Contacts } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
+import { resolveCurrencyCode } from "../helpers/resolve-currency-code.js";
 
 async function updateContact(
   name: string,
@@ -12,7 +13,10 @@ async function updateContact(
   phone: string | undefined,
   address: Address | undefined,
   contactId: string,
+  defaultCurrency: string | undefined,
 ): Promise<Contact | undefined> {
+  const resolvedCurrency = resolveCurrencyCode(defaultCurrency);
+
   await xeroClient.authenticate();
 
   const contact: Contact = {
@@ -20,6 +24,7 @@ async function updateContact(
     firstName,
     lastName,
     emailAddress: email,
+    defaultCurrency: resolvedCurrency,
     phones: phone
       ? [
           {
@@ -70,6 +75,7 @@ export async function updateXeroContact(
   email?: string,
   phone?: string,
   address?: Address,
+  defaultCurrency?: string,
 ): Promise<XeroClientResponse<Contact>> {
   try {
     const updatedContact = await updateContact(
@@ -80,6 +86,7 @@ export async function updateXeroContact(
       phone,
       address,
       contactId,
+      defaultCurrency,
     );
 
     if (!updatedContact) {

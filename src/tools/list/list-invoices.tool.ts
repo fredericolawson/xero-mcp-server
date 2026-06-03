@@ -18,10 +18,29 @@ const ListInvoicesTool = CreateXeroTool(
     invoiceNumbers: z
       .array(z.string())
       .optional()
-      .describe("If provided, invoice line items will also be returned"),
+      .describe("Filter by one or more invoice numbers. Useful for checking whether a bill with a given invoice number already exists (dedup). If provided, invoice line items will also be returned."),
+    statuses: z
+      .array(z.enum(["DRAFT", "SUBMITTED", "AUTHORISED", "PAID", "VOIDED", "DELETED"]))
+      .optional()
+      .describe("Filter by one or more invoice statuses, e.g. [\"AUTHORISED\", \"PAID\"]."),
+    where: z
+      .string()
+      .optional()
+      .describe("Optional Xero 'where' filter expression for field/date filtering beyond the dedicated parameters, e.g. `Type==\"ACCPAY\"`, `Date>=DateTime(2026,01,01)`, or `Contact.Name==\"Acme\"`."),
+    order: z
+      .string()
+      .optional()
+      .describe("Field to order results by, e.g. `Date DESC`. Defaults to `UpdatedDateUTC DESC`."),
   },
-  async ({ page, contactIds, invoiceNumbers }) => {
-    const response = await listXeroInvoices(page, contactIds, invoiceNumbers);
+  async ({ page, contactIds, invoiceNumbers, statuses, where, order }) => {
+    const response = await listXeroInvoices({
+      page,
+      contactIds,
+      invoiceNumbers,
+      statuses,
+      where,
+      order,
+    });
     if (response.error !== null) {
       return {
         content: [

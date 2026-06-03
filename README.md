@@ -141,7 +141,7 @@ payroll.timesheets
 - `list-contacts`: Retrieve a list of contacts from Xero (supports `where` filtering, ordering, `includeArchived`, `pageSize`, and `summaryOnly=false` for full detail)
 - `get-contact`: Retrieve a single contact by ID, including addresses, phones, contact persons, balances and payment terms
 - `list-credit-notes`: Retrieve a list of credit notes
-- `list-invoices`: Retrieve a list of invoices
+- `list-invoices`: Retrieve a list of invoices (supports filtering by `contactIds`, `invoiceNumbers`, `statuses`, a `where` expression, and `order`)
 - `list-items`: Retrieve a list of items
 - `list-manual-journals`: Retrieve a list of manual journals
 - `list-organisation-details`: Retrieve details about an organisation
@@ -166,7 +166,8 @@ payroll.timesheets
 - `create-bank-transaction`: Create a new bank transaction
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
-- `create-invoice`: Create a new invoice
+- `create-invoice`: Create a new invoice (supports `currencyCode`, `dueDate`, and `status` — DRAFT/SUBMITTED/AUTHORISED)
+- `create-invoice-attachment`: Attach a local file (e.g. the source PDF) to an existing invoice or bill
 - `create-item`: Create a new item
 - `create-manual-journal`: Create a new manual journal
 - `create-payment`: Create a new payment

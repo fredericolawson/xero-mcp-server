@@ -4,22 +4,34 @@ import { formatError } from "../helpers/format-error.js";
 import { Invoice } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 
-async function getInvoices(
-  invoiceNumbers: string[] | undefined,
-  contactIds: string[] | undefined,
-  page: number,
-): Promise<Invoice[]> {
+export interface ListInvoicesOptions {
+  page?: number;
+  contactIds?: string[];
+  invoiceNumbers?: string[];
+  statuses?: string[];
+  where?: string;
+  order?: string;
+}
+
+async function getInvoices({
+  page = 1,
+  contactIds,
+  invoiceNumbers,
+  statuses,
+  where,
+  order = "UpdatedDateUTC DESC",
+}: ListInvoicesOptions): Promise<Invoice[]> {
   await xeroClient.authenticate();
 
   const invoices = await xeroClient.accountingApi.getInvoices(
     xeroClient.tenantId,
     undefined, // ifModifiedSince
-    undefined, // where
-    "UpdatedDateUTC DESC", // order
+    where, // where
+    order, // order
     undefined, // iDs
     invoiceNumbers, // invoiceNumbers
     contactIds, // contactIDs
-    undefined, // statuses
+    statuses, // statuses
     page,
     false, // includeArchived
     false, // createdByMyApp
@@ -33,15 +45,14 @@ async function getInvoices(
 }
 
 /**
- * List all invoices from Xero
+ * List invoices from Xero with optional filtering by contact, invoice number,
+ * status, a Xero 'where' expression, and ordering.
  */
 export async function listXeroInvoices(
-  page: number = 1,
-  contactIds?: string[],
-  invoiceNumbers?: string[],
+  options: ListInvoicesOptions = {},
 ): Promise<XeroClientResponse<Invoice[]>> {
   try {
-    const invoices = await getInvoices(invoiceNumbers, contactIds, page);
+    const invoices = await getInvoices(options);
 
     return {
       result: invoices,

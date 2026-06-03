@@ -33,7 +33,7 @@ const CreateInvoiceTool = CreateXeroTool(
   {
     contactId: z.string().describe("The ID of the contact to create the invoice for. \
       Can be obtained from the list-contacts tool."),
-      
+
     lineItems: z.array(lineItemSchema),
     type: z.enum(["ACCREC", "ACCPAY"]).describe("The type of invoice to create. \
       ACCREC is for sales invoices, Accounts Receivable, or customer invoices. \
@@ -41,10 +41,26 @@ const CreateInvoiceTool = CreateXeroTool(
       If the type is not specified, the default is ACCREC."),
     reference: z.string().describe("A reference number for the invoice.").optional(),
     date: z.string().describe("The date the invoice was created (YYYY-MM-DD format).").optional(),
+    dueDate: z.string().describe("The date the invoice is due (YYYY-MM-DD format). \
+      If omitted, defaults to 30 days after the invoice date.").optional(),
+    currencyCode: z.string().describe("The 3-letter ISO currency code for the invoice, e.g. GBP, EUR, USD. \
+      If omitted, the invoice uses the contact's default currency. The currency must be enabled on the Xero \
+      organisation, and it is fixed once the invoice is created (it cannot be changed afterwards).").optional(),
+    status: z.enum(["DRAFT", "SUBMITTED", "AUTHORISED"]).describe("The status to create the invoice with. \
+      Defaults to DRAFT. Use AUTHORISED to approve the invoice on creation (it must be complete and valid).").optional(),
   },
-  async ({ contactId, lineItems, type, reference, date }) => {
+  async ({ contactId, lineItems, type, reference, date, dueDate, currencyCode, status }) => {
     const xeroInvoiceType = type === "ACCREC" ? Invoice.TypeEnum.ACCREC : Invoice.TypeEnum.ACCPAY;
-    const result = await createXeroInvoice(contactId, lineItems, xeroInvoiceType, reference, date);
+    const result = await createXeroInvoice({
+      contactId,
+      lineItems,
+      type: xeroInvoiceType,
+      reference,
+      date,
+      dueDate,
+      currencyCode,
+      status,
+    });
     if (result.isError) {
       return {
         content: [
@@ -75,6 +91,8 @@ const CreateInvoiceTool = CreateXeroTool(
             `Contact: ${invoice?.contact?.name}`,
             `Type: ${invoice?.type}`,
             `Date: ${invoice?.date}`,
+            invoice?.dueDate ? `Due Date: ${invoice.dueDate}` : null,
+            invoice?.currencyCode ? `Currency: ${invoice.currencyCode}` : null,
             `Total: ${invoice?.total}`,
             `Status: ${invoice?.status}`,
             deepLink ? `Link to view: ${deepLink}` : null,

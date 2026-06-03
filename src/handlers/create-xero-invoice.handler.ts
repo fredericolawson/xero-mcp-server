@@ -1,7 +1,7 @@
 import { xeroClient } from "../clients/xero-client.js";
 import { XeroClientResponse } from "../types/tool-response.js";
 import { formatError } from "../helpers/format-error.js";
-import { Invoice, LineItemTracking } from "xero-node";
+import { CurrencyCode, Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 
 interface InvoiceLineItem {
@@ -14,14 +14,54 @@ interface InvoiceLineItem {
   tracking?: LineItemTracking[];
 }
 
-async function createInvoice(
-  contactId: string,
-  lineItems: InvoiceLineItem[],
-  type: Invoice.TypeEnum,
-  reference: string | undefined,
-  date: string | undefined,
-): Promise<Invoice | undefined> {
+/** Statuses an invoice can be created with. */
+export type CreatableInvoiceStatus = "DRAFT" | "SUBMITTED" | "AUTHORISED";
+
+export interface CreateInvoiceParams {
+  contactId: string;
+  lineItems: InvoiceLineItem[];
+  type: Invoice.TypeEnum;
+  reference?: string;
+  date?: string;
+  dueDate?: string;
+  currencyCode?: string;
+  status?: CreatableInvoiceStatus;
+}
+
+/**
+ * Validate and convert a 3-letter ISO currency string into the SDK enum.
+ * Throws a user-meaningful error for unsupported codes.
+ */
+function resolveCurrencyCode(currencyCode?: string): CurrencyCode | undefined {
+  if (!currencyCode) return undefined;
+  const code = currencyCode.toUpperCase();
+  if (!(code in CurrencyCode)) {
+    throw new Error(
+      `Unsupported currency code: "${currencyCode}". Use a 3-letter ISO code such as GBP, EUR or USD.`,
+    );
+  }
+  // xero-node's .d.ts declares CurrencyCode without its string values, so TS
+  // types it as numeric; at runtime the enum values ARE the 3-letter strings
+  // (e.g. CurrencyCode.GBP === "GBP"), which is exactly what the API expects.
+  return code as unknown as CurrencyCode;
+}
+
+async function createInvoice({
+  contactId,
+  lineItems,
+  type,
+  reference,
+  date,
+  dueDate,
+  currencyCode,
+  status,
+}: CreateInvoiceParams): Promise<Invoice | undefined> {
+  // Validate currency up front so we fail fast on a bad code.
+  const resolvedCurrency = resolveCurrencyCode(currencyCode);
+
   await xeroClient.authenticate();
+
+  const invoiceDate = date || new Date().toISOString().split("T")[0];
 
   const invoice: Invoice = {
     type: type,
@@ -29,14 +69,17 @@ async function createInvoice(
       contactID: contactId,
     },
     lineItems: lineItems,
-    date: date || new Date().toISOString().split("T")[0], // Use provided date or today's date
-    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0], // 30 days from now
+    date: invoiceDate,
+    dueDate:
+      dueDate ||
+      new Date(new Date(invoiceDate).getTime() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0], // provided due date, or 30 days after the invoice date
     ...(type === Invoice.TypeEnum.ACCPAY
       ? { invoiceNumber: reference }
       : { reference: reference }),
-    status: Invoice.StatusEnum.DRAFT,
+    ...(resolvedCurrency ? { currencyCode: resolvedCurrency } : {}),
+    status: status ? Invoice.StatusEnum[status] : Invoice.StatusEnum.DRAFT,
   };
 
   const response = await xeroClient.accountingApi.createInvoices(
@@ -57,20 +100,10 @@ async function createInvoice(
  * Create a new invoice in Xero
  */
 export async function createXeroInvoice(
-  contactId: string,
-  lineItems: InvoiceLineItem[],
-  type: Invoice.TypeEnum = Invoice.TypeEnum.ACCREC,
-  reference?: string,
-  date?: string,
+  params: CreateInvoiceParams,
 ): Promise<XeroClientResponse<Invoice>> {
   try {
-    const createdInvoice = await createInvoice(
-      contactId,
-      lineItems,
-      type,
-      reference,
-      date,
-    );
+    const createdInvoice = await createInvoice(params);
 
     if (!createdInvoice) {
       throw new Error("Invoice creation failed.");

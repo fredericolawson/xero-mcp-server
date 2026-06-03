@@ -138,7 +138,8 @@ payroll.timesheets
 ### Available MCP Commands
 
 - `list-accounts`: Retrieve a list of accounts
-- `list-contacts`: Retrieve a list of contacts from Xero
+- `list-contacts`: Retrieve a list of contacts from Xero (supports `where` filtering, ordering, `includeArchived`, `pageSize`, and `summaryOnly=false` for full detail)
+- `get-contact`: Retrieve a single contact by ID, including addresses, phones, contact persons, balances and payment terms
 - `list-credit-notes`: Retrieve a list of credit notes
 - `list-invoices`: Retrieve a list of invoices
 - `list-items`: Retrieve a list of items

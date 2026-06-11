@@ -166,7 +166,7 @@ payroll.timesheets
 - `create-bank-transaction`: Create a new bank transaction
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
-- `create-invoice`: Create a new invoice (supports `currencyCode`, `dueDate`, and `status` — DRAFT/SUBMITTED/AUTHORISED)
+- `create-invoice`: Create a new invoice (supports `currencyCode`, `dueDate`, `status` — DRAFT/SUBMITTED/AUTHORISED — and `attachmentPath` to upload a local file, e.g. the supplier's PDF, onto the new invoice; requires the `accounting.attachments` scope on the Xero app)
 - `create-item`: Create a new item
 - `create-manual-journal`: Create a new manual journal
 - `create-payment`: Create a new payment

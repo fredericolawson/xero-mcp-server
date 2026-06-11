@@ -1,7 +1,11 @@
+import { basename } from "node:path";
+
 import { z } from "zod";
 import { createXeroInvoice } from "../../handlers/create-xero-invoice.handler.js";
+import { createXeroInvoiceAttachment } from "../../handlers/create-xero-invoice-attachment.handler.js";
 import { DeepLinkType, getDeepLink } from "../../helpers/get-deeplink.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
+import { validateAttachmentFile } from "../../helpers/validate-attachment-file.js";
 import { Invoice } from "xero-node";
 
 const trackingSchema = z.object({
@@ -48,8 +52,27 @@ const CreateInvoiceTool = CreateXeroTool(
       organisation, and it is fixed once the invoice is created (it cannot be changed afterwards).").optional(),
     status: z.enum(["DRAFT", "SUBMITTED", "AUTHORISED"]).describe("The status to create the invoice with. \
       Defaults to DRAFT. Use AUTHORISED to approve the invoice on creation (it must be complete and valid).").optional(),
+    attachmentPath: z.string().describe("Absolute local file path of a document (e.g. the supplier's PDF) to \
+      upload and attach to the invoice once it is created. Max 25 MB. The file is validated before the invoice \
+      is created, so a bad path fails cleanly without creating anything.").optional(),
   },
-  async ({ contactId, lineItems, type, reference, date, dueDate, currencyCode, status }) => {
+  async ({ contactId, lineItems, type, reference, date, dueDate, currencyCode, status, attachmentPath }) => {
+    // Validate the attachment up front so a bad file path fails before the
+    // invoice exists, rather than leaving a bill behind with no document.
+    if (attachmentPath) {
+      const validationError = validateAttachmentFile(attachmentPath);
+      if (validationError) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error creating invoice: the invoice was NOT created because the attachment file failed validation: ${validationError}`,
+            },
+          ],
+        };
+      }
+    }
+
     const xeroInvoiceType = type === "ACCREC" ? Invoice.TypeEnum.ACCREC : Invoice.TypeEnum.ACCPAY;
     const result = await createXeroInvoice({
       contactId,
@@ -81,6 +104,18 @@ const CreateInvoiceTool = CreateXeroTool(
         )
       : null;
 
+    let attachmentStatus: string | null = null;
+    if (attachmentPath && invoice.invoiceID) {
+      const attachmentResult = await createXeroInvoiceAttachment(
+        invoice.invoiceID,
+        attachmentPath,
+      );
+      attachmentStatus = attachmentResult.isError
+        ? `WARNING — the invoice was created, but uploading "${basename(attachmentPath)}" failed: ${attachmentResult.error}. \
+Do NOT create the invoice again. Either attach the file manually in Xero via the link below, or void this invoice with void-invoice and recreate it.`
+        : `Attachment: "${basename(attachmentPath)}" uploaded`;
+    }
+
     return {
       content: [
         {
@@ -95,6 +130,7 @@ const CreateInvoiceTool = CreateXeroTool(
             invoice?.currencyCode ? `Currency: ${invoice.currencyCode}` : null,
             `Total: ${invoice?.total}`,
             `Status: ${invoice?.status}`,
+            attachmentStatus,
             deepLink ? `Link to view: ${deepLink}` : null,
           ]
             .filter(Boolean)

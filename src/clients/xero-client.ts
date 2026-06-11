@@ -81,6 +81,7 @@ class CustomConnectionsXeroClient extends MCPXeroClient {
   // Legacy scopes (deprecated but still supported for existing apps)
   private readonly XERO_DEFAULT_AUTH_SCOPES_V1 = [
     "accounting.transactions",
+    "accounting.attachments",
     "accounting.contacts",
     "accounting.settings",
     "accounting.reports.read",
@@ -92,6 +93,7 @@ class CustomConnectionsXeroClient extends MCPXeroClient {
   // Granular scopes (required for new apps)
   private readonly XERO_DEFAULT_AUTH_SCOPES_V2 = [
     "accounting.invoices",
+    "accounting.attachments",
     "accounting.payments",
     "accounting.banktransactions",
     "accounting.manualjournals",

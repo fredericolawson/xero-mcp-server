@@ -1,13 +1,43 @@
-# Xero MCP Server
+# Xero MCP Server — Enhanced Fork
 
-This is a Model Context Protocol (MCP) server implementation for Xero. It provides a bridge between the MCP protocol and Xero's API, allowing for standardized access to Xero's accounting and business features.
+A Model Context Protocol (MCP) server for [Xero](https://www.xero.com/). It bridges the MCP protocol and Xero's API so an MCP client (Claude Desktop, Claude Code, etc.) can read and write your Xero accounting data through natural language.
+
+This is a **fork of the official [`xeroapi/xero-mcp-server`](https://github.com/XeroAPI/xero-mcp-server)**, with extra tools and richer parameters aimed at real bookkeeping workflows — multi-currency bills, attaching source PDFs, deduping, and cleaning up bad data. Everything in the official server is here; the sections below cover what's been added on top.
+
+> Because this fork isn't published to npm under its own name, you run it from a **local build** (see [Running this fork](#running-this-fork)), not via `npx @xeroapi/xero-mcp-server` — that command would pull the official upstream package, not this one.
+
+---
+
+## What this fork adds over the official Xero MCP
+
+### New tools
+
+| Tool | What it does | Gap in the official MCP it fills |
+|------|--------------|----------------------------------|
+| `get-contact` | Fetch a **single contact's full record** by ID — addresses, phones, contact persons, outstanding/overdue balances, payment terms, tax details and default account codes. | Upstream only has a lightweight `list-contacts`; there's no way to pull one contact's full detail. |
+| `void-invoice` | **Void/cancel an invoice or bill**: an approved (AUTHORISED) invoice → `VOIDED`; a `DRAFT`/`SUBMITTED` one → `DELETED`. Blocks cleanly if payments are applied. | Upstream has no void or delete path for invoices. |
+| `delete-bank-transaction` | **Delete a Spend Money / Receive Money transaction** (sets its status to `DELETED`). Guards against bank transfers (which the API can't delete) and surfaces a clear "un-reconcile first" error when needed. | Upstream exposes create/list/update for bank transactions but no delete. |
+
+### Enhanced existing tools
+
+| Tool | Parameters this fork adds (on top of the upstream ones) |
+|------|---------------------------------------------------------|
+| `create-invoice` | `currencyCode` (multi-currency bills), `dueDate`, `status` (`DRAFT`/`SUBMITTED`/`AUTHORISED` — create approved bills directly, skipping the manual draft-approval step), and `attachmentPath` (upload a local file, e.g. a supplier PDF, onto the new bill **in the same call**; the file is validated *before* the invoice is created, so a bad path never leaves an orphaned bill). |
+| `list-invoices` | `statuses`, `where` (arbitrary Xero filter expressions, e.g. `Type=="ACCPAY"`), and `order`. (Upstream already supports `page`, `contactIds`, `invoiceNumbers`.) |
+| `list-contacts` | `where`, `order`, `includeArchived`, `summaryOnly=false` (full-detail mode with addresses/phones/balances/payment terms), and `pageSize`, with bounded pagination. (Upstream supports `page` and `searchTerm`.) |
+| `update-contact` | `defaultCurrency` — set a contact's default currency via the API, so new invoices/bills inherit it. |
+
+Together these turn the server into an end-to-end **bill-processing pipeline**: look up a contact, dedup against existing bills by invoice number, create an AUTHORISED multi-currency bill with the source PDF attached in one call, and void/delete entries that were booked in error.
+
+---
 
 ## Features
 
-- Xero OAuth2 authentication with custom connections
-- Contact management
-- Chart of Accounts management
-- Invoice creation and management
+- Xero OAuth2 authentication (custom connections **and** bearer token)
+- Contact, invoice, bank transaction, and Chart of Accounts management
+- Multi-currency invoicing with PDF attachments
+- Reports: P&L, balance sheet, trial balance, aged payables/receivables
+- Payroll (NZ/UK): employees, leave, timesheets
 - MCP protocol compliance
 
 ## Prerequisites
@@ -18,6 +48,7 @@ This is a Model Context Protocol (MCP) server implementation for Xero. It provid
 
 ## Docs and Links
 
+- [Official upstream project](https://github.com/XeroAPI/xero-mcp-server) (this fork tracks it as the `upstream` git remote)
 - [Xero Public API Documentation](https://developer.xero.com/documentation/api/)
 - [Xero API Explorer](https://api-explorer.xero.com/)
 - [Xero OpenAPI Specs](https://github.com/XeroAPI/Xero-OpenAPI)
@@ -28,7 +59,7 @@ This is a Model Context Protocol (MCP) server implementation for Xero. It provid
 
 ### Create a Xero Account
 
-If you don't already have a Xero account and organisation already, can create one by signing up [here](https://www.xero.com/au/signup/) using the free trial.
+If you don't already have a Xero account and organisation, you can create one by signing up [here](https://www.xero.com/au/signup/) using the free trial.
 
 We recommend using a Demo Company to start with because it comes with some pre-loaded sample data. Once you are logged in, switch to it by using the top left-hand dropdown and selecting "Demo Company". You can reset the data on a Demo Company, or change the country, at any time by using the top left-hand dropdown and navigating to [My Xero](https://my.xero.com).
 
@@ -40,8 +71,7 @@ There are 2 modes of authentication supported in the Xero MCP server:
 
 #### 1. Custom Connections
 
-This is a better choice for testing and development which allows you to specify client id and secrets for a specific organisation.
-It is also the recommended approach if you are integrating this into 3rd party MCP clients such as Claude Desktop.
+This is a better choice for testing and development, which lets you specify a client id and secret for a specific organisation. It's also the recommended approach for integrating into 3rd-party MCP clients such as Claude Desktop.
 
 ##### Configuring your Xero Developer account
 
@@ -57,44 +87,21 @@ Custom connections require different scopes depending on when they were created.
 | From Apr 29, 2026 | [SCOPES_V2](src/clients/xero-client.ts#L93-L112) (granular permissions) |
 
 > **Note:** The MCP server automatically tries V1 scopes first and falls back to V2 if needed.
-> 
+>
 > You can override these by setting the `XERO_SCOPES` environment variable to a space-separated list of scopes.
-
-##### Integrating the MCP server with Claude Desktop
-
-To add the MCP server to Claude go to Settings > Developer > Edit config and add the following to your claude_desktop_config.json file:
-
-```json
-{
-  "mcpServers": {
-    "xero": {
-      "command": "npx",
-      "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
-      "env": {
-        "XERO_CLIENT_ID": "your_client_id_here",
-        "XERO_CLIENT_SECRET": "your_client_secret_here",
-        "XERO_SCOPES": "accounting.invoices accounting.contacts accounting.settings"
-      }
-    }
-  }
-}
-```
-
-The `XERO_SCOPES` variable is optional. If omitted, the default scopes listed above will be used.
-
-NOTE: If you are using [Node Version Manager](https://github.com/nvm-sh/nvm) `"command": "npx"` section change it to be the full path to the executable, ie: `your_home_directory/.nvm/versions/node/v22.14.0/bin/npx` on Mac / Linux or `"your_home_directory\\.nvm\\versions\\node\\v22.14.0\\bin\\npx"` on Windows
+>
+> **Fork-specific:** the `attachmentPath` option on `create-invoice` needs the **`accounting.attachments`** scope. Add it to your connection if you want to attach source PDFs to bills.
 
 #### 2. Bearer Token
 
-This is a better choice if you are to support multiple Xero accounts at runtime and allow the MCP client to execute an auth flow (such as PKCE) as required.
-In this case, use the following configuration:
+This is a better choice if you need to support multiple Xero accounts at runtime and let the MCP client run an auth flow (such as PKCE). In this case, use the following configuration:
 
 ```json
 {
   "mcpServers": {
     "xero": {
-      "command": "npx",
-      "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
+      "command": "node",
+      "args": ["insert-your-file-path-here/xero-mcp-server/dist/index.js"],
       "env": {
         "XERO_CLIENT_BEARER_TOKEN": "your_bearer_token"
       }
@@ -107,7 +114,7 @@ NOTE: The `XERO_CLIENT_BEARER_TOKEN` will take precedence over the `XERO_CLIENT_
 
 ##### Required Scopes for Bearer Token
 
-When obtaining a bearer token, you must request the appropriate scopes. The scopes you request should be:
+When obtaining a bearer token, you must request the appropriate scopes:
 
 > **Note:** Some scopes are being deprecated in favour of more granular scopes. See the [Xero OAuth 2.0 Scopes documentation](https://developer.xero.com/documentation/guides/oauth2/scopes/) for details on deprecation timelines.
 
@@ -116,6 +123,7 @@ accounting.transactions (Deprecated)
 accounting.transactions.read (Deprecated)
 accounting.invoices
 accounting.invoices.read
+accounting.attachments        # required for create-invoice attachmentPath (this fork)
 accounting.payments
 accounting.payments.read
 accounting.banktransactions
@@ -127,21 +135,53 @@ accounting.reports.aged.read
 accounting.reports.balancesheet.read
 accounting.reports.profitandloss.read
 accounting.reports.trialbalance.read
-accounting.contacts 
-accounting.settings 
-payroll.settings 
-payroll.employees 
+accounting.contacts
+accounting.settings
+payroll.settings
+payroll.employees
 payroll.timesheets
 ```
 
+## Running this fork
 
-### Available MCP Commands
+Because this fork runs from a local build, clone it, build it, and point your MCP client at the compiled entry file.
+
+```bash
+git clone https://github.com/fredericolawson/xero-mcp-server.git
+cd xero-mcp-server
+npm install
+npm run build      # outputs dist/index.js
+```
+
+Then add it to Claude Desktop via **Settings > Developer > Edit config**, pointing `args` at the built file:
+
+```json
+{
+  "mcpServers": {
+    "xero": {
+      "command": "node",
+      "args": ["/absolute/path/to/xero-mcp-server/dist/index.js"],
+      "env": {
+        "XERO_CLIENT_ID": "your_client_id_here",
+        "XERO_CLIENT_SECRET": "your_client_secret_here",
+        "XERO_SCOPES": "accounting.invoices accounting.attachments accounting.contacts accounting.banktransactions accounting.settings"
+      }
+    }
+  }
+}
+```
+
+`XERO_SCOPES` is optional; if omitted, the default scopes are used. On Windows, escape backslashes in the path, e.g. `"C:\\projects\\xero-mcp-server\\dist\\index.js"`. If you use [nvm](https://github.com/nvm-sh/nvm), set `command` to the full path of the `node` binary.
+
+## Available MCP Commands
+
+Tools marked ✨ are **new in this fork**; tools marked ➕ are **enhanced** beyond the official server (see [What this fork adds](#what-this-fork-adds-over-the-official-xero-mcp) for details).
 
 - `list-accounts`: Retrieve a list of accounts
-- `list-contacts`: Retrieve a list of contacts from Xero (supports `where` filtering, ordering, `includeArchived`, `pageSize`, and `summaryOnly=false` for full detail)
-- `get-contact`: Retrieve a single contact by ID, including addresses, phones, contact persons, balances and payment terms
+- ➕ `list-contacts`: Retrieve a list of contacts (adds `where`, `order`, `includeArchived`, `pageSize`, and `summaryOnly=false` for full detail)
+- ✨ `get-contact`: Retrieve a single contact by ID, including addresses, phones, contact persons, balances and payment terms
 - `list-credit-notes`: Retrieve a list of credit notes
-- `list-invoices`: Retrieve a list of invoices (supports filtering by `contactIds`, `invoiceNumbers`, `statuses`, a `where` expression, and `order`)
+- ➕ `list-invoices`: Retrieve a list of invoices (adds `statuses`, a `where` expression, and `order`; upstream `contactIds`/`invoiceNumbers` still supported)
 - `list-items`: Retrieve a list of items
 - `list-manual-journals`: Retrieve a list of manual journals
 - `list-organisation-details`: Retrieve details about an organisation
@@ -159,14 +199,14 @@ payroll.timesheets
 - `list-payroll-leave-periods`: Retrieve a list of a Payroll Employee's leave periods
 - `list-payroll-leave-types`: Retrieve a list of all available leave types in Xero Payroll
 - `list-timesheets`: Retrieve a list of Payroll Timesheets
-- `list-aged-receivables-by-contact`: Retrieves aged receivables for a contact
-- `list-aged-payables-by-contact`: Retrieves aged payables for a contact
+- `list-aged-receivables-by-contact`: Retrieve aged receivables for a contact
+- `list-aged-payables-by-contact`: Retrieve aged payables for a contact
 - `list-contact-groups`: Retrieve a list of contact groups
 - `list-tracking-categories`: Retrieve a list of tracking categories
 - `create-bank-transaction`: Create a new bank transaction
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
-- `create-invoice`: Create a new invoice (supports `currencyCode`, `dueDate`, `status` — DRAFT/SUBMITTED/AUTHORISED — and `attachmentPath` to upload a local file, e.g. the supplier's PDF, onto the new invoice; requires the `accounting.attachments` scope on the Xero app)
+- ➕ `create-invoice`: Create a new invoice (adds `currencyCode`, `dueDate`, `status` — DRAFT/SUBMITTED/AUTHORISED — and `attachmentPath` to upload a local file, e.g. the supplier's PDF, onto the new bill; `attachmentPath` requires the `accounting.attachments` scope)
 - `create-item`: Create a new item
 - `create-manual-journal`: Create a new manual journal
 - `create-payment`: Create a new payment
@@ -175,9 +215,9 @@ payroll.timesheets
 - `create-tracking-category`: Create a new tracking category
 - `create-tracking-option`: Create a new tracking option
 - `update-bank-transaction`: Update an existing bank transaction
-- `update-contact`: Update an existing contact (including its default currency)
+- ➕ `update-contact`: Update an existing contact (adds `defaultCurrency`)
 - `update-invoice`: Update an existing draft invoice
-- `void-invoice`: Void an approved invoice/bill (or delete a draft)
+- ✨ `void-invoice`: Void an approved invoice/bill (or delete a draft/submitted one)
 - `update-item`: Update an existing item
 - `update-manual-journal`: Update an existing manual journal
 - `update-quote`: Update an existing draft quote
@@ -187,54 +227,42 @@ payroll.timesheets
 - `update-payroll-timesheet-line`: Update a line on an existing Payroll Timesheet
 - `approve-payroll-timesheet`: Approve a Payroll Timesheet
 - `revert-payroll-timesheet`: Revert an approved Payroll Timesheet
-- `add-payroll-timesheet-line`: Add new line on an existing Payroll Timesheet
+- `add-payroll-timesheet-line`: Add a new line on an existing Payroll Timesheet
 - `delete-payroll-timesheet`: Delete an existing Payroll Timesheet
-- `delete-bank-transaction`: Delete a Spend Money / Receive Money bank transaction (sets its status to DELETED)
+- ✨ `delete-bank-transaction`: Delete a Spend Money / Receive Money bank transaction (sets its status to DELETED; transfers and reconciled transactions are handled in the Xero UI)
 - `get-payroll-timesheet`: Retrieve an existing Payroll Timesheet
 
-For detailed API documentation, please refer to the [MCP Protocol Specification](https://modelcontextprotocol.io/).
+For detailed protocol documentation, see the [MCP Protocol Specification](https://modelcontextprotocol.io/).
 
 ## For Developers
 
 ### Installation
 
 ```bash
-# Using npm
-npm install
-
-# Using pnpm
-pnpm install
+npm install   # or: pnpm install
 ```
 
-### Run a build
+### Build
 
 ```bash
-# Using npm
-npm run build
-
-# Using pnpm
-pnpm build
+npm run build   # or: pnpm build
 ```
 
-### Integrating with Claude Desktop
+### Test & lint
 
-To link your Xero MCP server in development to Claude Desktop go to Settings > Developer > Edit config and add the following to your `claude_desktop_config.json` file:
+```bash
+npm test        # vitest
+npm run lint    # eslint
+```
 
-NOTE: For Windows ensure the `args` path escapes the `\` between folders ie. `"C:\\projects\xero-mcp-server\\dist\\index.js"`
+### Keeping in sync with upstream
 
-```json
-{
-  "mcpServers": {
-    "xero": {
-      "command": "node",
-      "args": ["insert-your-file-path-here/xero-mcp-server/dist/index.js"],
-      "env": {
-        "XERO_CLIENT_ID": "your_client_id_here",
-        "XERO_CLIENT_SECRET": "your_client_secret_here"
-      }
-    }
-  }
-}
+This fork tracks the official repo as the `upstream` remote:
+
+```bash
+git remote add upstream https://github.com/XeroAPI/xero-mcp-server.git   # one-time
+git fetch upstream
+git rebase upstream/main    # replay this fork's commits on top of the latest official release
 ```
 
 ## License
@@ -243,4 +271,4 @@ MIT
 
 ## Security
 
-Please do not commit your `.env` file or any sensitive credentials to version control (it is included in `.gitignore` as a safe default.)
+Please do not commit your `.env` file or any sensitive credentials to version control (it is included in `.gitignore` as a safe default).

@@ -142,3 +142,6 @@ dist
 
 # Cursor IDE
 .cursor/
+
+# Local-only Claude Code project guidance
+CLAUDE.md

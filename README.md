@@ -17,6 +17,11 @@ This is a **fork of the official [`xeroapi/xero-mcp-server`](https://github.com/
 | `get-contact` | Fetch a **single contact's full record** by ID — addresses, phones, contact persons, outstanding/overdue balances, payment terms, tax details and default account codes. | Upstream only has a lightweight `list-contacts`; there's no way to pull one contact's full detail. |
 | `void-invoice` | **Void/cancel an invoice or bill**: an approved (AUTHORISED) invoice → `VOIDED`; a `DRAFT`/`SUBMITTED` one → `DELETED`. Blocks cleanly if payments are applied. | Upstream has no void or delete path for invoices. |
 | `delete-bank-transaction` | **Delete a Spend Money / Receive Money transaction** (sets its status to `DELETED`). Guards against bank transfers (which the API can't delete) and surfaces a clear "un-reconcile first" error when needed. | Upstream exposes create/list/update for bank transactions but no delete. |
+| `create-purchase-order` / `list-purchase-orders` / `update-purchase-order` | **Raise and manage purchase orders** — the procurement step that precedes a bill. Create as DRAFT/SUBMITTED/AUTHORISED, filter by status and date, and update or cancel (DELETED). | Upstream has no purchase order support at all. |
+| `upload-attachment` / `list-attachments` / `get-attachment` | **Attach, list and download files on records that already exist** — bills/invoices, bank transactions, contacts, credit notes, manual journals and purchase orders. | Upstream can only attach a file to an invoice *at creation time* (and can't read attachments back). |
+| `allocate-credit-note` | **Apply a credit note to an invoice or bill**, reducing the amount owing. | Upstream can create a credit note but never allocate it, leaving the credit stranded. |
+| `delete-payment` | **Reverse a payment**, crediting the amount back to the linked invoice. | Upstream has no way to undo a payment. |
+| `list-repeating-invoices` | **List recurring invoice/bill templates** and their schedules. | Upstream has no repeating-invoice support. |
 
 ### Enhanced existing tools
 
@@ -90,7 +95,7 @@ Custom connections require different scopes depending on when they were created.
 >
 > You can override these by setting the `XERO_SCOPES` environment variable to a space-separated list of scopes.
 >
-> **Fork-specific:** the `attachmentPath` option on `create-invoice` needs the **`accounting.attachments`** scope. Add it to your connection if you want to attach source PDFs to bills.
+> **Fork-specific:** the `attachmentPath` option on `create-invoice` and the `upload-attachment` / `list-attachments` / `get-attachment` tools need the **`accounting.attachments`** scope. The purchase-order tools and `list-repeating-invoices` rely on **`accounting.transactions`** (part of the default V1 scope bundle). Add these to your connection to use those features.
 
 #### 2. Bearer Token
 
@@ -203,6 +208,10 @@ Tools marked ✨ are **new in this fork**; tools marked ➕ are **enhanced** bey
 - `list-aged-payables-by-contact`: Retrieve aged payables for a contact
 - `list-contact-groups`: Retrieve a list of contact groups
 - `list-tracking-categories`: Retrieve a list of tracking categories
+- ✨ `list-purchase-orders`: Retrieve a list of purchase orders (filter by `status` and issue-date range)
+- ✨ `list-repeating-invoices`: Retrieve recurring invoice/bill templates and their schedules
+- ✨ `list-attachments`: List the files attached to a record (invoice/bill, bank transaction, contact, credit note, manual journal, or purchase order)
+- ✨ `get-attachment`: Download a named attachment from a record to a local file
 - `create-bank-transaction`: Create a new bank transaction
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note
@@ -214,10 +223,14 @@ Tools marked ✨ are **new in this fork**; tools marked ➕ are **enhanced** bey
 - `create-payroll-timesheet`: Create a new Payroll Timesheet
 - `create-tracking-category`: Create a new tracking category
 - `create-tracking-option`: Create a new tracking option
+- ✨ `create-purchase-order`: Create a new purchase order (DRAFT/SUBMITTED/AUTHORISED)
+- ✨ `allocate-credit-note`: Apply (allocate) a credit note to an invoice or bill
+- ✨ `upload-attachment`: Upload a local file as an attachment to an existing record (invoice/bill, bank transaction, contact, credit note, manual journal, or purchase order); requires the `accounting.attachments` scope
 - `update-bank-transaction`: Update an existing bank transaction
 - ➕ `update-contact`: Update an existing contact (adds `defaultCurrency`)
 - `update-invoice`: Update an existing draft invoice
 - ✨ `void-invoice`: Void an approved invoice/bill (or delete a draft/submitted one)
+- ✨ `update-purchase-order`: Update an existing purchase order (or cancel it by setting status to DELETED)
 - `update-item`: Update an existing item
 - `update-manual-journal`: Update an existing manual journal
 - `update-quote`: Update an existing draft quote
@@ -230,6 +243,7 @@ Tools marked ✨ are **new in this fork**; tools marked ➕ are **enhanced** bey
 - `add-payroll-timesheet-line`: Add a new line on an existing Payroll Timesheet
 - `delete-payroll-timesheet`: Delete an existing Payroll Timesheet
 - ✨ `delete-bank-transaction`: Delete a Spend Money / Receive Money bank transaction (sets its status to DELETED; transfers and reconciled transactions are handled in the Xero UI)
+- ✨ `delete-payment`: Reverse (delete) a payment, crediting the amount back to the linked invoice
 - `get-payroll-timesheet`: Retrieve an existing Payroll Timesheet
 
 For detailed protocol documentation, see the [MCP Protocol Specification](https://modelcontextprotocol.io/).

@@ -13,6 +13,7 @@ import UpdateQuoteTool from "./update-quote.tool.js";
 import UpdateTrackingCategoryTool from "./update-tracking-category.tool.js";
 import UpdateTrackingOptionsTool from "./update-tracking-options.tool.js";
 import VoidInvoiceTool from "./void-invoice.tool.js";
+import UpdatePurchaseOrderTool from "./update-purchase-order.tool.js";
 
 export const UpdateTools = [
   UpdateContactTool,
@@ -28,5 +29,6 @@ export const UpdateTools = [
   RevertPayrollTimesheetTool,
   UpdateTrackingCategoryTool,
   UpdateTrackingOptionsTool,
-  VoidInvoiceTool
+  VoidInvoiceTool,
+  UpdatePurchaseOrderTool
 ];

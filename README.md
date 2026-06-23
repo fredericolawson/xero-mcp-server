@@ -22,6 +22,7 @@ This is a **fork of the official [`xeroapi/xero-mcp-server`](https://github.com/
 | `allocate-credit-note` | **Apply a credit note to an invoice or bill**, reducing the amount owing. | Upstream can create a credit note but never allocate it, leaving the credit stranded. |
 | `delete-payment` | **Reverse a payment**, crediting the amount back to the linked invoice. | Upstream has no way to undo a payment. |
 | `list-repeating-invoices` | **List recurring invoice/bill templates** and their schedules. | Upstream has no repeating-invoice support. |
+| `list-journals` | **Read the general ledger** — the double-entry postings the P&L and Balance Sheet are built from. Auto-paginates the whole ledger and lets you decompose any account's total into the individual line items behind it, filtered by date and/or account code. | Upstream has no journals/GL access, so there's no way to see the transactions that make up an account balance. |
 
 ### Enhanced existing tools
 
@@ -95,7 +96,7 @@ Custom connections require different scopes depending on when they were created.
 >
 > You can override these by setting the `XERO_SCOPES` environment variable to a space-separated list of scopes.
 >
-> **Fork-specific:** the `attachmentPath` option on `create-invoice` and the `upload-attachment` / `list-attachments` / `get-attachment` tools need the **`accounting.attachments`** scope. The purchase-order tools and `list-repeating-invoices` rely on **`accounting.transactions`** (part of the default V1 scope bundle). Add these to your connection to use those features.
+> **Fork-specific:** the `attachmentPath` option on `create-invoice` and the `upload-attachment` / `list-attachments` / `get-attachment` tools need the **`accounting.attachments`** scope. The purchase-order tools and `list-repeating-invoices` rely on **`accounting.transactions`** (part of the default V1 scope bundle). `list-journals` needs the standalone **`accounting.journals.read`** scope (now in the default bundles, but it must also be enabled on your custom connection). Add these to your connection to use those features.
 
 #### 2. Bearer Token
 
@@ -135,6 +136,7 @@ accounting.banktransactions
 accounting.banktransactions.read
 accounting.manualjournals
 accounting.manualjournals.read
+accounting.journals.read      # required for list-journals (this fork)
 accounting.reports.read (Deprecated)
 accounting.reports.aged.read
 accounting.reports.balancesheet.read
@@ -212,6 +214,7 @@ Tools marked ✨ are **new in this fork**; tools marked ➕ are **enhanced** bey
 - ✨ `list-repeating-invoices`: Retrieve recurring invoice/bill templates and their schedules
 - ✨ `list-attachments`: List the files attached to a record (invoice/bill, bank transaction, contact, credit note, manual journal, or purchase order)
 - ✨ `get-attachment`: Download a named attachment from a record to a local file
+- ✨ `list-journals`: Read the general ledger — decompose any account's total into the individual postings behind it (filter by date range and/or account code; `paymentsOnly` for cash basis); requires the `accounting.journals.read` scope
 - `create-bank-transaction`: Create a new bank transaction
 - `create-contact`: Create a new contact
 - `create-credit-note`: Create a new credit note

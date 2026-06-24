@@ -43,6 +43,7 @@ Use list-accounts first to find the account code.",
 
     const lines = response.result?.lines ?? [];
     const truncated = response.result?.truncated ?? false;
+    const skipped = response.result?.skipped ?? [];
 
     const net = lines.reduce((sum, line) => sum + line.signedAmount, 0);
 
@@ -69,6 +70,11 @@ Use list-accounts first to find the account code.",
       `Net movement (debits positive, credits negative): ${net.toFixed(2)}`,
       truncated
         ? "NOTE: hit the per-source pagination cap — some documents may be missing; narrow the date range."
+        : null,
+      skipped.length
+        ? `NOTE: could not read these source(s), so their postings are missing: ${skipped.join(
+            ", ",
+          )} (likely a missing scope on the connection).`
         : null,
       sourceSummary.length ? `By source:\n${sourceSummary.join("\n")}` : null,
     ]

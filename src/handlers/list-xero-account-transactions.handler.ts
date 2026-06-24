@@ -13,9 +13,9 @@ import { formatError } from "../helpers/format-error.js";
 // Reconstructs the postings to a single account from the source documents that
 // carry line items (invoices/bills, spend/receive money, credit notes, manual
 // journals). This is the fork's stand-in for the gated Journals endpoint: it
-// uses scopes the connection already has (accounting.transactions), but it
-// won't perfectly tie to the P&L — system-generated journals (FX, rounding,
-// some payment/overpayment allocations) have no document line items to read.
+// uses scopes the connection already has, but it won't perfectly tie to the
+// P&L — system-generated journals (FX, rounding, some payment/overpayment
+// allocations) have no document line items to read.
 const PAGE_SIZE = 100;
 const MAX_PAGES = 50; // safety cap per source (up to 5,000 documents each)
 
@@ -40,6 +40,7 @@ export interface ListAccountTransactionsResult {
   accountCode: string;
   lines: AccountTransactionLine[];
   truncated: boolean;
+  skipped: string[]; // sources that couldn't be read (e.g. missing scope)
 }
 
 function dateExpr(date: string): string {
@@ -59,18 +60,13 @@ function buildWhere(
   return clauses.length ? clauses.join(" && ") : undefined;
 }
 
-async function fetchAllPages<T>(
-  fetchPage: (page: number) => Promise<T[]>,
-): Promise<{ items: T[]; truncated: boolean }> {
-  const items: T[] = [];
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const batch = await fetchPage(page);
-    items.push(...batch);
-    if (batch.length < PAGE_SIZE) {
-      return { items, truncated: false };
-    }
-  }
-  return { items, truncated: true };
+// xero-node deserializes document date fields into Date objects at runtime even
+// though the typings say string — normalize to a plain YYYY-MM-DD string.
+function toDateString(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string") return value.slice(0, 10);
+  return String(value);
 }
 
 function matchesAccount(
@@ -89,7 +85,9 @@ const credit = (amount: number) => -Math.abs(amount);
 /**
  * Reconstruct the line-item postings to a single account from the source
  * documents, with an optional date range. A document-level stand-in for the
- * (now premium-gated) Journals endpoint.
+ * (now premium-gated) Journals endpoint. Each source is read independently, so
+ * one that isn't accessible under the connection's scopes is skipped and
+ * reported rather than failing the whole call.
  */
 export async function listXeroAccountTransactions({
   accountCode,
@@ -103,158 +101,186 @@ export async function listXeroAccountTransactions({
     const tenantId = xeroClient.tenantId;
     const headers = getClientHeaders();
     const lines: AccountTransactionLine[] = [];
+    const skipped: string[] = [];
     let truncated = false;
 
-    // --- Invoices & bills (only posted statuses: AUTHORISED / PAID) ---
-    const invoiceResult = await fetchAllPages<Invoice>((page) =>
-      xeroClient.accountingApi
-        .getInvoices(
-          tenantId,
-          undefined,
-          buildWhere(fromDate, toDate),
-          "Date ASC",
-          undefined,
-          undefined,
-          undefined,
-          ["AUTHORISED", "PAID"],
-          page,
-          false,
-          false,
-          undefined,
-          false,
-          PAGE_SIZE,
-          undefined,
-          headers,
-        )
-        .then((response) => response.body.invoices ?? []),
-    );
-    truncated = truncated || invoiceResult.truncated;
-    for (const invoice of invoiceResult.items) {
-      const isBill = invoice.type === Invoice.TypeEnum.ACCPAY;
-      for (const line of matchesAccount(invoice.lineItems, accountCode)) {
-        const amount = line.lineAmount ?? 0;
-        lines.push({
-          date: invoice.date,
-          sourceType: isBill ? "ACCPAY" : "ACCREC",
-          documentNumber: invoice.invoiceNumber,
-          documentId: invoice.invoiceID,
-          contact: invoice.contact?.name,
-          description: line.description,
-          lineAmount: amount,
-          signedAmount: isBill ? debit(amount) : credit(amount),
-        });
+    // Page through a single source, swallowing access errors (a source the
+    // connection can't read is recorded in `skipped`, not fatal).
+    async function collect<T>(
+      label: string,
+      fetchPage: (page: number) => Promise<T[]>,
+      handle: (item: T) => void,
+    ): Promise<void> {
+      try {
+        const items: T[] = [];
+        for (let page = 1; page <= MAX_PAGES; page++) {
+          const batch = await fetchPage(page);
+          items.push(...batch);
+          if (batch.length < PAGE_SIZE) break;
+          if (page === MAX_PAGES) truncated = true;
+        }
+        items.forEach(handle);
+      } catch {
+        skipped.push(label);
       }
     }
+
+    const target = accountCode.trim().toLowerCase();
+
+    // --- Invoices & bills (only posted statuses: AUTHORISED / PAID) ---
+    await collect<Invoice>(
+      "invoices/bills",
+      (page) =>
+        xeroClient.accountingApi
+          .getInvoices(
+            tenantId,
+            undefined,
+            buildWhere(fromDate, toDate),
+            "Date ASC",
+            undefined,
+            undefined,
+            undefined,
+            ["AUTHORISED", "PAID"],
+            page,
+            false,
+            false,
+            undefined,
+            false,
+            PAGE_SIZE,
+            undefined,
+            headers,
+          )
+          .then((response) => response.body.invoices ?? []),
+      (invoice) => {
+        const isBill = invoice.type === Invoice.TypeEnum.ACCPAY;
+        for (const line of matchesAccount(invoice.lineItems, accountCode)) {
+          const amount = line.lineAmount ?? 0;
+          lines.push({
+            date: toDateString(invoice.date),
+            sourceType: isBill ? "ACCPAY" : "ACCREC",
+            documentNumber: invoice.invoiceNumber,
+            documentId: invoice.invoiceID,
+            contact: invoice.contact?.name,
+            description: line.description,
+            lineAmount: amount,
+            signedAmount: isBill ? debit(amount) : credit(amount),
+          });
+        }
+      },
+    );
 
     // --- Spend / receive money bank transactions (AUTHORISED only) ---
-    const bankResult = await fetchAllPages<BankTransaction>((page) =>
-      xeroClient.accountingApi
-        .getBankTransactions(
-          tenantId,
-          undefined,
-          buildWhere(fromDate, toDate, 'Status=="AUTHORISED"'),
-          "Date ASC",
-          page,
-          undefined,
-          PAGE_SIZE,
-          headers,
-        )
-        .then((response) => response.body.bankTransactions ?? []),
+    await collect<BankTransaction>(
+      "bank transactions",
+      (page) =>
+        xeroClient.accountingApi
+          .getBankTransactions(
+            tenantId,
+            undefined,
+            buildWhere(fromDate, toDate, 'Status=="AUTHORISED"'),
+            "Date ASC",
+            page,
+            undefined,
+            PAGE_SIZE,
+            headers,
+          )
+          .then((response) => response.body.bankTransactions ?? []),
+      (txn) => {
+        const txnType = String(txn.type ?? "BANK");
+        const isSpend = txnType.startsWith("SPEND");
+        for (const line of matchesAccount(txn.lineItems, accountCode)) {
+          const amount = line.lineAmount ?? 0;
+          lines.push({
+            date: toDateString(txn.date),
+            sourceType: txnType,
+            documentNumber: txn.reference,
+            documentId: txn.bankTransactionID,
+            contact: txn.contact?.name,
+            description: line.description,
+            lineAmount: amount,
+            signedAmount: isSpend ? debit(amount) : credit(amount),
+          });
+        }
+      },
     );
-    truncated = truncated || bankResult.truncated;
-    for (const txn of bankResult.items) {
-      const txnType = String(txn.type ?? "BANK");
-      const isSpend = txnType.startsWith("SPEND");
-      for (const line of matchesAccount(txn.lineItems, accountCode)) {
-        const amount = line.lineAmount ?? 0;
-        lines.push({
-          date: txn.date,
-          sourceType: txnType,
-          documentNumber: txn.reference,
-          documentId: txn.bankTransactionID,
-          contact: txn.contact?.name,
-          description: line.description,
-          lineAmount: amount,
-          signedAmount: isSpend ? debit(amount) : credit(amount),
-        });
-      }
-    }
 
     // --- Credit notes (AUTHORISED / PAID) ---
-    const creditNoteResult = await fetchAllPages<CreditNote>((page) =>
-      xeroClient.accountingApi
-        .getCreditNotes(
-          tenantId,
-          undefined,
-          buildWhere(
-            fromDate,
-            toDate,
-            '(Status=="AUTHORISED" || Status=="PAID")',
-          ),
-          "Date ASC",
-          page,
-          undefined,
-          PAGE_SIZE,
-          headers,
-        )
-        .then((response) => response.body.creditNotes ?? []),
+    await collect<CreditNote>(
+      "credit notes",
+      (page) =>
+        xeroClient.accountingApi
+          .getCreditNotes(
+            tenantId,
+            undefined,
+            buildWhere(
+              fromDate,
+              toDate,
+              '(Status=="AUTHORISED" || Status=="PAID")',
+            ),
+            "Date ASC",
+            page,
+            undefined,
+            PAGE_SIZE,
+            headers,
+          )
+          .then((response) => response.body.creditNotes ?? []),
+      (creditNote) => {
+        const isBillCredit =
+          creditNote.type === CreditNote.TypeEnum.ACCPAYCREDIT;
+        for (const line of matchesAccount(creditNote.lineItems, accountCode)) {
+          const amount = line.lineAmount ?? 0;
+          lines.push({
+            date: toDateString(creditNote.date),
+            sourceType: isBillCredit ? "ACCPAYCREDIT" : "ACCRECCREDIT",
+            documentNumber: creditNote.creditNoteNumber,
+            documentId: creditNote.creditNoteID,
+            contact: creditNote.contact?.name,
+            description: line.description,
+            lineAmount: amount,
+            // A bill credit reverses an expense (credit); a sales credit
+            // reverses revenue (debit).
+            signedAmount: isBillCredit ? credit(amount) : debit(amount),
+          });
+        }
+      },
     );
-    truncated = truncated || creditNoteResult.truncated;
-    for (const creditNote of creditNoteResult.items) {
-      const isBillCredit = creditNote.type === CreditNote.TypeEnum.ACCPAYCREDIT;
-      for (const line of matchesAccount(creditNote.lineItems, accountCode)) {
-        const amount = line.lineAmount ?? 0;
-        lines.push({
-          date: creditNote.date,
-          sourceType: isBillCredit ? "ACCPAYCREDIT" : "ACCRECCREDIT",
-          documentNumber: creditNote.creditNoteNumber,
-          documentId: creditNote.creditNoteID,
-          contact: creditNote.contact?.name,
-          description: line.description,
-          lineAmount: amount,
-          // A bill credit reverses an expense (credit); a sales credit
-          // reverses revenue (debit).
-          signedAmount: isBillCredit ? credit(amount) : debit(amount),
-        });
-      }
-    }
 
     // --- Manual journals (POSTED only; line amounts are already signed) ---
-    const manualJournalResult = await fetchAllPages<ManualJournal>((page) =>
-      xeroClient.accountingApi
-        .getManualJournals(
-          tenantId,
-          undefined,
-          buildWhere(fromDate, toDate, 'Status=="POSTED"'),
-          "Date ASC",
-          page,
-          PAGE_SIZE,
-          headers,
-        )
-        .then((response) => response.body.manualJournals ?? []),
+    await collect<ManualJournal>(
+      "manual journals",
+      (page) =>
+        xeroClient.accountingApi
+          .getManualJournals(
+            tenantId,
+            undefined,
+            buildWhere(fromDate, toDate, 'Status=="POSTED"'),
+            "Date ASC",
+            page,
+            PAGE_SIZE,
+            headers,
+          )
+          .then((response) => response.body.manualJournals ?? []),
+      (journal) => {
+        for (const line of journal.journalLines ?? []) {
+          if ((line.accountCode ?? "").trim().toLowerCase() !== target) continue;
+          const amount = line.lineAmount ?? 0; // debit positive, credit negative
+          lines.push({
+            date: toDateString(journal.date),
+            sourceType: "MANUAL",
+            documentNumber: journal.narration,
+            documentId: journal.manualJournalID,
+            description: line.description,
+            lineAmount: amount,
+            signedAmount: amount,
+          });
+        }
+      },
     );
-    truncated = truncated || manualJournalResult.truncated;
-    const target = accountCode.trim().toLowerCase();
-    for (const journal of manualJournalResult.items) {
-      for (const line of journal.journalLines ?? []) {
-        if ((line.accountCode ?? "").trim().toLowerCase() !== target) continue;
-        const amount = line.lineAmount ?? 0; // debit positive, credit negative
-        lines.push({
-          date: journal.date,
-          sourceType: "MANUAL",
-          documentNumber: journal.narration,
-          documentId: journal.manualJournalID,
-          description: line.description,
-          lineAmount: amount,
-          signedAmount: amount,
-        });
-      }
-    }
 
     lines.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
 
     return {
-      result: { accountCode, lines, truncated },
+      result: { accountCode, lines, truncated, skipped },
       isError: false,
       error: null,
     };

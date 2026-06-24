@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for [Xero](https://www.xero.com/). It brid
 
 This is a **fork of the official [`xeroapi/xero-mcp-server`](https://github.com/XeroAPI/xero-mcp-server)**, with extra tools and richer parameters aimed at real bookkeeping workflows — multi-currency bills, attaching source PDFs, deduping, and cleaning up bad data. Everything in the official server is here; the sections below cover what's been added on top.
 
-> Because this fork isn't published to npm under its own name, don't install it via `npx @xeroapi/xero-mcp-server` — that command pulls the official upstream package, not this one. Instead run it straight from GitHub with `npx` or from a local build (see [Running this fork](#running-this-fork)).
+> Because this fork isn't published to npm under its own name, don't install it via `npx @xeroapi/xero-mcp-server` — that command pulls the official upstream package, not this one. Instead run it straight from GitHub with `npx` or from a [local build](#running-from-a-local-build) (see [Setup](#setup)).
 
 ---
 
@@ -75,9 +75,9 @@ NOTE: To use Payroll-specific queries, the region should be either NZ or UK.
 
 There are 2 modes of authentication supported in the Xero MCP server:
 
-#### 1. Custom Connections
+#### 1. Custom Connection (recommended)
 
-This is a better choice for testing and development, which lets you specify a client id and secret for a specific organisation. It's also the recommended approach for integrating into 3rd-party MCP clients such as Claude Desktop.
+This is the standard choice for a single organisation: you specify a client id and secret, and it's the recommended approach for integrating into 3rd-party MCP clients such as Claude Desktop.
 
 ##### Configuring your Xero Developer account
 
@@ -110,7 +110,35 @@ payroll.timesheets
 >
 > **Fork-specific:** the `attachmentPath` option on `create-invoice` and the `upload-attachment` / `list-attachments` / `get-attachment` tools need **`accounting.attachments`**. The purchase-order tools, `list-repeating-invoices` and `list-account-transactions` rely on the transaction scopes (`accounting.invoices` / `accounting.banktransactions` / `accounting.manualjournals`). All of these are in the granular set above. Note that credit notes have no granular scope, so `list-account-transactions` skips them and says so in its output.
 
-#### 2. Bearer Token
+##### Running the server
+
+Run it straight from GitHub with `npx` — nothing to clone or build. Add this to your MCP client (in Claude Desktop, **Settings > Developer > Edit config**):
+
+```json
+{
+  "mcpServers": {
+    "xero": {
+      "command": "npx",
+      "args": ["-y", "github:fredericolawson/xero-mcp-server"],
+      "env": {
+        "XERO_CLIENT_ID": "your_client_id_here",
+        "XERO_CLIENT_SECRET": "your_client_secret_here"
+      }
+    }
+  }
+}
+```
+
+`XERO_SCOPES` is optional and can be added to `env` to override the default scopes.
+
+> **Updating:** `npx` caches the GitHub spec, so it won't pick up new commits on its own. To pull the latest `main`, clear the cache and restart your client:
+> ```bash
+> rm -rf ~/.npm/_npx
+> ```
+
+Prefer to run from a local build? See [Running from a local build](#running-from-a-local-build).
+
+#### 2. Bearer Token (advanced)
 
 This is a better choice if you need to support multiple Xero accounts at runtime and let the MCP client run an auth flow (such as PKCE). In this case, use the following configuration:
 
@@ -157,39 +185,9 @@ payroll.employees
 payroll.timesheets
 ```
 
-## Running this fork
+## Running from a local build
 
-There are two ways to run it. Option A needs no manual clone or build and is how the fork is normally run.
-
-### Option A — run from GitHub with `npx` (recommended)
-
-Point your MCP client straight at the GitHub repo. `npx` fetches it and the `prepare` script builds it on first launch, so there's nothing to clone or compile.
-
-```json
-{
-  "mcpServers": {
-    "xero": {
-      "command": "npx",
-      "args": ["-y", "github:fredericolawson/xero-mcp-server"],
-      "env": {
-        "XERO_CLIENT_ID": "your_client_id_here",
-        "XERO_CLIENT_SECRET": "your_client_secret_here"
-      }
-    }
-  }
-}
-```
-
-Add it in Claude Desktop via **Settings > Developer > Edit config**. `XERO_SCOPES` is optional and can be added to `env` to override the default scopes.
-
-> **Updating:** `npx` caches the GitHub spec, so it won't pick up new commits on its own. To pull the latest `main`, clear the cache and restart your client:
-> ```bash
-> rm -rf ~/.npm/_npx
-> ```
-
-### Option B — local build
-
-Clone, build, and point your MCP client at the compiled entry file — useful when developing against the code locally.
+Most setups can use the `npx` config [above](#running-the-server). Build locally only when you're developing against the code. Clone, build, and point your MCP client at the compiled entry file:
 
 ```bash
 git clone https://github.com/fredericolawson/xero-mcp-server.git

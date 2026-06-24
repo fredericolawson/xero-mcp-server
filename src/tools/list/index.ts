@@ -31,7 +31,7 @@ import ListContactGroupsTool from "./list-contact-groups.tool.js";
 import ListPurchaseOrdersTool from "./list-purchase-orders.tool.js";
 import ListRepeatingInvoicesTool from "./list-repeating-invoices.tool.js";
 import ListAttachmentsTool from "./list-attachments.tool.js";
-import ListJournalsTool from "./list-journals.tool.js";
+import ListAccountTransactionsTool from "./list-account-transactions.tool.js";
 
 export const ListTools = [
   ListAccountsTool,
@@ -62,5 +62,5 @@ export const ListTools = [
   ListPurchaseOrdersTool,
   ListRepeatingInvoicesTool,
   ListAttachmentsTool,
-  ListJournalsTool
+  ListAccountTransactionsTool
 ];

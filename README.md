@@ -85,18 +85,30 @@ Set up a Custom Connection following these instructions: https://developer.xero.
 
 ##### Required Scopes
 
-Custom connections require different scopes depending on when they were created. **All scopes in the relevant list must be added to your custom connection:**
+Xero custom connections use **granular scopes**. Add all of these to your custom connection ([SCOPES_V2](src/clients/xero-client.ts#L93-L112)):
 
-| Custom Connection Created | Required Scopes |
-|---------------------------|-----------------|
-| Before Apr 29, 2026 | [SCOPES_V1](src/clients/xero-client.ts#L82-L90) (bundled permissions) |
-| From Apr 29, 2026 | [SCOPES_V2](src/clients/xero-client.ts#L93-L112) (granular permissions) |
+```
+accounting.invoices
+accounting.attachments
+accounting.payments
+accounting.banktransactions
+accounting.manualjournals
+accounting.reports.aged.read
+accounting.reports.balancesheet.read
+accounting.reports.profitandloss.read
+accounting.reports.trialbalance.read
+accounting.contacts
+accounting.settings
+payroll.settings
+payroll.employees
+payroll.timesheets
+```
 
-> **Note:** The MCP server automatically tries V1 scopes first and falls back to V2 if needed.
+> **Note:** Connections created before Apr 29, 2026 used a legacy *bundled* scope set ([SCOPES_V1](src/clients/xero-client.ts#L82-L90): `accounting.transactions`, `accounting.reports.read`, etc.). Those broad scopes are deprecated and no longer offered for new connections, so use the granular set above. The server requests the legacy set first and automatically falls back to the granular set, so both kinds of connection work — but new setups will only ever satisfy the granular set.
 >
 > You can override these by setting the `XERO_SCOPES` environment variable to a space-separated list of scopes.
 >
-> **Fork-specific:** the `attachmentPath` option on `create-invoice` and the `upload-attachment` / `list-attachments` / `get-attachment` tools need the **`accounting.attachments`** scope. The purchase-order tools, `list-repeating-invoices` and `list-account-transactions` rely on **`accounting.transactions`** (part of the default V1 scope bundle). Add these to your connection to use those features.
+> **Fork-specific:** the `attachmentPath` option on `create-invoice` and the `upload-attachment` / `list-attachments` / `get-attachment` tools need **`accounting.attachments`**. The purchase-order tools, `list-repeating-invoices` and `list-account-transactions` rely on the transaction scopes (`accounting.invoices` / `accounting.banktransactions` / `accounting.manualjournals`). All of these are in the granular set above. Note that credit notes have no granular scope, so `list-account-transactions` skips them and says so in its output.
 
 #### 2. Bearer Token
 
@@ -125,8 +137,6 @@ When obtaining a bearer token, you must request the appropriate scopes:
 > **Note:** Some scopes are being deprecated in favour of more granular scopes. See the [Xero OAuth 2.0 Scopes documentation](https://developer.xero.com/documentation/guides/oauth2/scopes/) for details on deprecation timelines.
 
 ```
-accounting.transactions (Deprecated)
-accounting.transactions.read (Deprecated)
 accounting.invoices
 accounting.invoices.read
 accounting.attachments        # required for create-invoice attachmentPath (this fork)
@@ -136,7 +146,6 @@ accounting.banktransactions
 accounting.banktransactions.read
 accounting.manualjournals
 accounting.manualjournals.read
-accounting.reports.read (Deprecated)
 accounting.reports.aged.read
 accounting.reports.balancesheet.read
 accounting.reports.profitandloss.read

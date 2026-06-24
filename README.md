@@ -1,8 +1,20 @@
 # Xero MCP Server — Enhanced Fork
 
-Talk to your [Xero](https://www.xero.com/) accounts in plain English. This connects Xero to Claude (or any AI assistant that supports MCP) so you can look up invoices, create bills with the supplier's PDF attached, chase overdue payments, and break down what makes up an account — just by asking.
+Talk to your [Xero](https://www.xero.com/) accounts in plain English — look up invoices, create bills with the supplier's PDF attached, chase overdue payments, and break down what makes up an account, just by asking. It connects Xero to Claude (or any AI assistant that supports MCP).
 
-It's an enhanced fork of the official [`xeroapi/xero-mcp-server`](https://github.com/XeroAPI/xero-mcp-server) with extra tools built for real bookkeeping workflows. [See what it adds ↓](#what-this-fork-adds-over-the-official-xero-mcp)
+## What you get beyond the standard Xero MCP
+
+Everything in the official [`xeroapi/xero-mcp-server`](https://github.com/XeroAPI/xero-mcp-server) is here — plus tools built for real bookkeeping workflows that the standard server doesn't have:
+
+- **Attach source PDFs to bills** — create a bill with the supplier's PDF attached in one step, and list or download attachments afterwards. (The standard server can only attach to an invoice at creation, and can't read attachments back.)
+- **Multi-currency bills, approved in one step** — set the currency and due date and create an already-approved bill, skipping the manual draft → approve step.
+- **Clean up mistakes** — void or delete invoices, delete spend/receive money transactions, and reverse payments. (The standard server has no way to undo these.)
+- **Purchase orders** — raise, list and update them. (The standard server has none.)
+- **Apply credit notes** — allocate a credit note against a bill or invoice, so the credit isn't left stranded.
+- **See what's behind an account** — break an account's total into the individual transactions that make it up, not just the summary figure.
+- **Richer lookups** — pull a contact's full record, filter and sort invoice/contact lists, and list recurring-invoice templates.
+
+[Full tool-by-tool breakdown ↓](#what-this-fork-adds-over-the-official-xero-mcp)
 
 ## Getting started
 

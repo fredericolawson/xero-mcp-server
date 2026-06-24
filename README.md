@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for [Xero](https://www.xero.com/). It brid
 
 This is a **fork of the official [`xeroapi/xero-mcp-server`](https://github.com/XeroAPI/xero-mcp-server)**, with extra tools and richer parameters aimed at real bookkeeping workflows — multi-currency bills, attaching source PDFs, deduping, and cleaning up bad data. Everything in the official server is here; the sections below cover what's been added on top.
 
-> Because this fork isn't published to npm under its own name, you run it from a **local build** (see [Running this fork](#running-this-fork)), not via `npx @xeroapi/xero-mcp-server` — that command would pull the official upstream package, not this one.
+> Because this fork isn't published to npm under its own name, don't install it via `npx @xeroapi/xero-mcp-server` — that command pulls the official upstream package, not this one. Instead run it straight from GitHub with `npx` or from a local build (see [Running this fork](#running-this-fork)).
 
 ---
 
@@ -150,7 +150,37 @@ payroll.timesheets
 
 ## Running this fork
 
-Because this fork runs from a local build, clone it, build it, and point your MCP client at the compiled entry file.
+There are two ways to run it. Option A needs no manual clone or build and is how the fork is normally run.
+
+### Option A — run from GitHub with `npx` (recommended)
+
+Point your MCP client straight at the GitHub repo. `npx` fetches it and the `prepare` script builds it on first launch, so there's nothing to clone or compile.
+
+```json
+{
+  "mcpServers": {
+    "xero": {
+      "command": "npx",
+      "args": ["-y", "github:fredericolawson/xero-mcp-server"],
+      "env": {
+        "XERO_CLIENT_ID": "your_client_id_here",
+        "XERO_CLIENT_SECRET": "your_client_secret_here"
+      }
+    }
+  }
+}
+```
+
+Add it in Claude Desktop via **Settings > Developer > Edit config**. `XERO_SCOPES` is optional and can be added to `env` to override the default scopes.
+
+> **Updating:** `npx` caches the GitHub spec, so it won't pick up new commits on its own. To pull the latest `main`, clear the cache and restart your client:
+> ```bash
+> rm -rf ~/.npm/_npx
+> ```
+
+### Option B — local build
+
+Clone, build, and point your MCP client at the compiled entry file — useful when developing against the code locally.
 
 ```bash
 git clone https://github.com/fredericolawson/xero-mcp-server.git
